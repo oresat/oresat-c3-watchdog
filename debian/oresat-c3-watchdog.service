@@ -1,0 +1,13 @@
+[Unit]
+Description="Pets the hardware watchdog on the C3"
+
+[Service]
+Type=simple
+ExecStart="/usr/bin/oresat-c3-watchdog"
+CPUQuota=100%
+CPUWeight=1000
+#Nice=-20? CPUSchedulingPolicy=rr?
+
+[Install]
+#basic.target? sysinit.target?
+WantedBy=multi-user.target

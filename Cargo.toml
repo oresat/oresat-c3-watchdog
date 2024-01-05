@@ -1,0 +1,22 @@
+[package]
+name = "oresat-c3-watchdog"
+version = "0.1.0"
+authors = ["Theo Hill <Theo0x48@gmail.com>"]
+edition = "2021"
+description = "Pets the hardware watchdog on the C3"
+license = "GPL-3.0-or-later"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+gpiod = "0.2.3"
+mio = { version = "0.8.10", features = ["net", "os-poll", "os-ext"] }
+nix = { version = "0.27.1", features = ["signal", "time"] }
+
+[package.metadata.deb]
+maintainer-scripts = "debian/"
+# cargo-deb somehow resolves the wrong libc (2.35 currently)
+# even though the cross toolchain uses 2.31.
+depends = "libc6:armhf (>= 2.31)"
+systemd-units = { enable = true }
