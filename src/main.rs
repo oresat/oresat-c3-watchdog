@@ -13,6 +13,7 @@ use nix::sys::{
 };
 use std::{
     array::IntoIter,
+    io::ErrorKind,
     iter::Cycle,
     net::{IpAddr, Ipv6Addr, SocketAddr},
     os::fd::{AsFd, AsRawFd},
@@ -95,8 +96,14 @@ impl Pingee {
     }
 
     fn on_ping(&self) -> Result<()> {
-        let mut buf = [0; 128]; // FIXME size 1? we don't care what
-        self.socket.recv_from(&mut buf)?;
+        // We don't care about the contents - bytes longer than buf are discarded
+        let mut buf = [0; 1];
+        // Read until there's no more packets, otherwise mio won't see the socket as readable again
+        while match self.socket.recv_from(&mut buf) {
+            Ok(_) => true,
+            Err(e) if e.kind() == ErrorKind::WouldBlock => false,
+            Err(e) => return Err(e).context("Ping socket read failed")
+        } {};
         if let (Some(OneShot(remaining)), OneShot(ping)) = (self.timer.get()?, PING_TIMEOUT) {
             if remaining < ping {
                 self.timer.set(PING_TIMEOUT, TimerSetTimeFlags::empty())?;
