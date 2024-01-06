@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use gpiod::{Chip, Lines, Options, Output};
-use mio::{event, net::UdpSocket, unix::SourceFd, Events, Interest, Poll, Registry, Token};
+use mio::{net::UdpSocket, unix::SourceFd, Events, Interest, Poll, Token};
 use nix::sys::{
-    signal,
+    signal::{SIGHUP, SIGINT, SIGTERM},
     signalfd::{SfdFlags, SigSet, SignalFd},
     time::TimeSpec,
     timerfd::{
@@ -13,7 +13,6 @@ use nix::sys::{
 };
 use std::{
     array::IntoIter,
-    io,
     iter::Cycle,
     net::{IpAddr, Ipv6Addr, SocketAddr},
     os::fd::{AsFd, AsRawFd},
@@ -41,14 +40,14 @@ struct Petter {
 impl Petter {
     fn new() -> Result<Self> {
         let pin = 25;
-        let chip = Chip::new("gpiochip2")?;
+        let chip = Chip::new("gpiochip2").context("Failed to get GPIO chip")?;
         //FIXME: Since the consumer is set instead of name, this clears on program exit. Once names
         //are updated, this check should be reinstated.
         //let label = "PET_WDT";
         //let consumer = chip.line_info(pin)?.consumer;
         //ensure!(label == consumer, "Invalid GPIO Pin label, expected {:?}, found {:?}", label, consumer);
         let opts = Options::output([pin]).values([false]);
-        let line = chip.request_lines(opts)?;
+        let line = chip.request_lines(opts).context("Failed to get GPIO pin")?;
 
         Ok(Petter {
             hand: line,
@@ -74,23 +73,38 @@ impl Petter {
     }
 }
 
-impl event::Source for Petter {
-    fn register(&mut self, r: &Registry, t: Token, i: Interest) -> io::Result<()> {
-        SourceFd(&self.timer.as_fd().as_raw_fd()).register(r, t, i)
-    }
-
-    fn reregister(&mut self, r: &Registry, t: Token, i: Interest) -> io::Result<()> {
-        SourceFd(&self.timer.as_fd().as_raw_fd()).reregister(r, t, i)
-    }
-
-    fn deregister(&mut self, r: &Registry) -> io::Result<()> {
-        SourceFd(&self.timer.as_fd().as_raw_fd()).deregister(r)
-    }
-}
-
 impl Drop for Petter {
     fn drop(&mut self) {
         let _ = self.hand.set_values([false]);
+    }
+}
+
+struct Pingee {
+    socket: UdpSocket,
+    timer: TimerFd,
+}
+
+impl Pingee {
+    fn new() -> Result<Self> {
+        let timer = TimerFd::new(ClockId::CLOCK_MONOTONIC, TimerFlags::TFD_NONBLOCK)?;
+        timer.set(INHIBIT, TimerSetTimeFlags::empty())?;
+        Ok(Self {
+            socket: UdpSocket::bind(ADDRESS)?,
+            timer,
+        })
+    }
+
+    fn on_ping(&self) -> Result<()> {
+        let mut buf = [0; 128]; // FIXME size 1? we don't care what
+        self.socket.recv_from(&mut buf)?;
+        if let (Some(OneShot(remaining)), OneShot(ping)) = (self.timer.get()?, PING_TIMEOUT) {
+            if remaining < ping {
+                self.timer.set(PING_TIMEOUT, TimerSetTimeFlags::empty())?;
+            }
+        } else {
+            bail!("Unexpected ping timeout timer")
+        }
+        Ok(())
     }
 }
 
@@ -99,30 +113,28 @@ fn main() -> Result<()> {
     let registry = poll.registry();
     let mut events = Events::with_capacity(128);
 
-    let mut request = UdpSocket::bind(ADDRESS)?;
-    const REQUEST: Token = Token(0);
-    registry.register(&mut request, REQUEST, Interest::READABLE)?;
-
+    let mut pingee = Pingee::new()?;
     let mut petter = Petter::new()?;
-    const PET: Token = Token(1);
-    registry.register(&mut petter, PET, Interest::READABLE)?;
+    let mask = SigSet::from_iter([SIGTERM, SIGHUP, SIGINT]);
+    mask.thread_block()?;
+    let sfd = SignalFd::with_flags(&mask, SfdFlags::SFD_NONBLOCK)?;
 
-    let timeout = TimerFd::new(ClockId::CLOCK_MONOTONIC, TimerFlags::TFD_NONBLOCK)?;
-    timeout.set(INHIBIT, TimerSetTimeFlags::empty())?;
+    const PING: Token = Token(0);
+    const PET: Token = Token(1);
     const TIMEOUT: Token = Token(2);
+    const SIGNAL: Token = Token(3);
+
+    registry.register(&mut pingee.socket, PING, Interest::READABLE)?;
     registry.register(
-        &mut SourceFd(&timeout.as_fd().as_raw_fd()),
+        &mut SourceFd(&petter.timer.as_fd().as_raw_fd()),
+        PET,
+        Interest::READABLE,
+    )?;
+    registry.register(
+        &mut SourceFd(&pingee.timer.as_fd().as_raw_fd()),
         TIMEOUT,
         Interest::READABLE,
     )?;
-
-    let mut mask = SigSet::empty();
-    mask.add(signal::SIGTERM);
-    mask.add(signal::SIGHUP);
-    mask.add(signal::SIGINT);
-    mask.thread_block()?;
-    let sfd = SignalFd::with_flags(&mask, SfdFlags::SFD_NONBLOCK)?;
-    const SIGNAL: Token = Token(3);
     registry.register(&mut SourceFd(&sfd.as_raw_fd()), SIGNAL, Interest::READABLE)?;
 
     petter.pet()?;
@@ -130,19 +142,7 @@ fn main() -> Result<()> {
         poll.poll(&mut events, None)?;
         for event in events.iter() {
             match event.token() {
-                REQUEST => {
-                    let mut buf = [0; 128]; // FIXME size 1? we don't care what
-                    request.recv_from(&mut buf)?;
-                    if let (Some(OneShot(remaining)), OneShot(ping)) =
-                        (timeout.get()?, PING_TIMEOUT)
-                    {
-                        if remaining < ping {
-                            timeout.set(PING_TIMEOUT, TimerSetTimeFlags::empty())?;
-                        }
-                    } else {
-                        bail!("Unexpected ping timeout timer")
-                    }
-                }
+                PING => pingee.on_ping()?,
                 PET => petter.on_pet()?,
                 TIMEOUT => break 'outer Err(anyhow!("Ping timeout")),
                 SIGNAL => break 'outer Ok(()),
