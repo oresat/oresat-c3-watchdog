@@ -15,11 +15,11 @@ use std::{
     array::IntoIter,
     io::ErrorKind,
     iter::Cycle,
-    net::{IpAddr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     os::fd::{AsFd, AsRawFd},
 };
 
-const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 20001);
+const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
 const INHIBIT: Expiration = OneShot(TimeSpec::new(120, 0));
 const PING_TIMEOUT: Expiration = OneShot(TimeSpec::new(30, 0));
 const PET_ON: Expiration = OneShot(TimeSpec::new(0, 100_000_000));
