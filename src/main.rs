@@ -25,6 +25,9 @@ const PING_TIMEOUT: Expiration = OneShot(TimeSpec::new(30, 0));
 const PET_ON: Expiration = OneShot(TimeSpec::new(0, 100_000_000));
 const PET_OFF: Expiration = OneShot(TimeSpec::new(0, 900_000_000));
 
+const PIN: u32 = 25;
+const CHIP: &str = "gpiochip2";
+
 // pet every 1s (0.1s high, 0.9s low)
 // wait 120s
 // if port hasn't been pinged in the last 30s, die
@@ -40,14 +43,13 @@ struct Petter {
 
 impl Petter {
     fn new() -> Result<Self> {
-        let pin = 25;
-        let chip = Chip::new("gpiochip2").context("Failed to get GPIO chip")?;
+        let chip = Chip::new(CHIP).context("Failed to get GPIO chip")?;
         //FIXME: Since the consumer is set instead of name, this clears on program exit. Once names
         //are updated, this check should be reinstated.
         //let label = "PET_WDT";
         //let consumer = chip.line_info(pin)?.consumer;
         //ensure!(label == consumer, "Invalid GPIO Pin label, expected {:?}, found {:?}", label, consumer);
-        let opts = Options::output([pin]).values([false]);
+        let opts = Options::output([PIN]).values([false]);
         let line = chip.request_lines(opts).context("Failed to get GPIO pin")?;
 
         Ok(Petter {
@@ -62,11 +64,14 @@ impl Petter {
         if let Some((value, duration)) = self.values.next() {
             self.hand.set_values([value])?;
             self.timer.set(duration, TimerSetTimeFlags::empty())?;
+            #[cfg(debug_assertions)]
+            println!("PETTED at {} with value {}", chrono::Local::now().timestamp_millis(), value);
         } else {
             bail!("Unexpected iterator in Petter")
         }
         Ok(())
     }
+
 
     fn on_pet(&mut self) -> Result<()> {
         self.timer.wait()?; // TODO: read and assert 1?
@@ -111,11 +116,19 @@ impl Pingee {
         } else {
             bail!("Unexpected ping timeout timer")
         }
+        #[cfg(debug_assertions)]
+        println!("PINGED at {}", chrono::Local::now().timestamp_millis());
         Ok(())
     }
 }
 
 fn main() -> Result<()> {
+    #[cfg(debug_assertions)]
+    let build_type = "Debug";
+    #[cfg(not(debug_assertions))]
+    let build_type = "Release";
+    println!("This is a {} build.", build_type);
+
     let mut poll = Poll::new()?;
     let registry = poll.registry();
     let mut events = Events::with_capacity(128);
@@ -158,3 +171,63 @@ fn main() -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn test_pet() -> Result<()>{
+        //let mut petter = Petter::new()?;
+        let chip = Chip::new(CHIP).context("Failed to get GPIO chip")?;
+        let output_opts = Options::output([PIN]).values([false]);
+        let input_opts = Options::input([PIN]);
+
+        let test_lane_output = chip.request_lines(output_opts).context("Failed to get GPIO pin")?;
+        test_lane_output.set_values([true])?;
+        drop(test_lane_output);
+
+        let test_lane_input = chip.request_lines(input_opts).context("Failed to get GPIO pin")?;
+        let value = test_lane_input.get_values([false;1])?; // Get the line value
+        println!("READ VALUE: {}", value[0]);
+        drop(test_lane_input);
+
+        //let test_lane_output = chip.request_lines(output_opts).context("Failed to get GPIO pin")?;
+
+
+        //petter.hand = chip.request_lines(input_opts).context("Failed to get GPIO pin")?;
+
+        //let mut petter = Petter::new()?;
+
+        // Read this to get sim value
+        // cat /sys/devices/platform/gpio-sim.0/gpiochip2/sim_gpio25/value
+
+        // Or do read with libgpiod
+        // gpioget --bias=as-is gpiochip2 25
+        // Need to take down the line and grab it again though.
+        
+        // Works but not really useful
+        /*
+        let mut line_value = petter.hand.get_values([false;1])?;
+        println!("Line before pet(): {}", line_value[0]);
+        assert_eq!(line_value[0], false);
+
+        petter.pet()?;
+
+        let line_value = petter.hand.get_values([false;1])?;
+        println!("Line After pet(): {}", line_value[0]);
+        assert_eq!(line_value[0], true);
+
+        petter.pet()?;
+
+        let line_value = petter.hand.get_values([false;1])?;
+        println!("Line After pet(): {}", line_value[0]);
+        assert_eq!(line_value[0], false);
+        //nix::unistd::sleep(10000);
+        */
+
+        Ok(())
+    }
+}
+
+

@@ -10,9 +10,11 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1.0.79"
-gpiod = "0.2.3"
+#gpiod = "0.2.3"
+gpiod = "0.3.0"
 mio = { version = "0.8.10", features = ["net", "os-poll", "os-ext"] }
 nix = { version = "0.27.1", features = ["signal", "time"] }
+chrono = "0.4"
 
 [package.metadata.deb]
 maintainer-scripts = "debian/"
