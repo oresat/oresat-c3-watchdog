@@ -11,6 +11,7 @@ https://github.com/abhiTronix/raspberry-pi-cross-compilers
 
 ### Build a debian package:
 `cargo deb --target armv7-unknown-linux-gnueabihf`
+
 Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
 
 ### Debugging the watchdog:
