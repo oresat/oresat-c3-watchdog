@@ -15,10 +15,14 @@ https://github.com/abhiTronix/raspberry-pi-cross-compilers
 Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
 
 ### Debugging the watchdog:
-- omit the --release flag to run in debug mode
-- prints petted and pinged times
+- Omit the --release flag to run in debug mode
+- Prints petted and pinged times
   
 `cargo run`
+
+- Handy script that will ping the watchdog UDP port every 5 seconds
+  
+`test_ping.sh`
 
 ### Testing the watchdog:
 `cargo test`
