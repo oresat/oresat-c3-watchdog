@@ -1,7 +1,7 @@
 ### Initial Setup
-Ensure rust is up to date: `rustup update`
-Install the cross toolchain: `rustup target add armv7-unknown-linux-gnueabihf`
-Install cargo-deb: `cargo install cargo-deb`
+- Ensure rust is up to date: `rustup update`
+- Install the cross toolchain: `rustup target add armv7-unknown-linux-gnueabihf`
+- Install cargo-deb: `cargo install cargo-deb`
 
 If it complains about incompatible GLIBC versions consider using an older cross compiler toolchain
 https://github.com/abhiTronix/raspberry-pi-cross-compilers
