@@ -17,6 +17,7 @@ Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
 ### Debugging the watchdog:
 - omit the --release flag to run in debug mode
 - prints petted and pinged times
+  
 `cargo run`
 
 ### Testing the watchdog:
