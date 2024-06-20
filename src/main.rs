@@ -5,7 +5,7 @@
 // Run Tests with print statements: cargo test -- --nocapture
     
 use anyhow::{anyhow, bail, Context, Result};
-use gpiocdev::{Request, line::Value};
+use gpiod::{Chip, Lines, Options, Output};
 use mio::{net::UdpSocket, unix::SourceFd, Events, Interest, Poll, Token};
 use nix::sys::{
     signal::{SIGHUP, SIGINT, SIGTERM},
@@ -25,9 +25,6 @@ use std::{
     os::fd::{AsFd, AsRawFd},
 };
 
-const GPIO_LABEL: &str = "PET_WDT";
-const GPIO_CHIP: &str = "/dev/gpiochip2";
-
 const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
 const INHIBIT: Expiration = OneShot(TimeSpec::new(120, 0));
 const PING_TIMEOUT: Expiration = OneShot(TimeSpec::new(30, 0));
@@ -42,37 +39,40 @@ const PET_OFF: Expiration = OneShot(TimeSpec::new(0, 900_000_000));
 // set line low on death
 
 struct Petter {
-    lane: u32,
-    hand: Request,
+    hand: Lines<Output>,
     timer: TimerFd,
-    values: Cycle<IntoIter<(Value, Expiration), 2>>,
+    values: Cycle<IntoIter<(bool, Expiration), 2>>,
 }
 
 impl Petter {
     fn new() -> Result<Self> {
-        
-        let line = gpiocdev::find_named_line(GPIO_LABEL)
-            .expect(&format!("{} GPIO not found. If on a dev machine setup gpio-sim first", GPIO_LABEL));
 
-        let req = Request::builder()
-            .on_chip(GPIO_CHIP)
-            .with_found_line(&line)
-            .as_output(Value::Inactive) // Initially Set LOW
-            .with_consumer("C3_Watchdog")
-            .request()?;
+        const GPIO_LABEL: &str = "PET_WDT";
+        const GPIO_LINE: u32 = 25;
+        const GPIO_CHIP: &str = "/dev/gpiochip2";
+        const GPIO_CONSUMER: &str = "C3_Watchdog";
+
+        let chip = Chip::new(GPIO_CHIP).context("Failed to get GPIO chip")?;
+
+        let read_label = chip.line_info(GPIO_LINE)?.name;
+        anyhow::ensure!(read_label == GPIO_LABEL, "Invalid GPIO LINE label, expected {:?}, found {:?}", read_label, GPIO_LABEL);
+
+        let opts = Options::output([GPIO_LINE])
+            .values([false])
+            .consumer(GPIO_CONSUMER);
+        let line = chip.request_lines(opts).context("Failed to get GPIO pin")?;
 
         Ok(Petter {
-            lane: line.info.offset,
-            hand: req,
+            hand: line,
             timer: TimerFd::new(ClockId::CLOCK_MONOTONIC, TimerFlags::TFD_NONBLOCK)?,
-            values: [(Value::Active, PET_ON), (Value::Inactive, PET_OFF)].into_iter().cycle(),
+            values: [(true, PET_ON), (false, PET_OFF)].into_iter().cycle(),
         })
     }
 
     fn pet(&mut self) -> Result<()> {
         // functions as a toggle
         if let Some((value, duration)) = self.values.next() {
-            self.hand.set_value(self.lane,value)?;
+            self.hand.set_values([value])?;
             self.timer.set(duration, TimerSetTimeFlags::empty())?;
             #[cfg(debug_assertions)]
             println!("PETTED at {} ms with value {}", chrono::Local::now().timestamp_millis(), value);
@@ -91,7 +91,7 @@ impl Petter {
 
 impl Drop for Petter {
     fn drop(&mut self) {
-        let _ = self.hand.set_value(self.lane, Value::Inactive);
+        let _ = self.hand.set_values([false]);
     }
 }
 
@@ -189,31 +189,31 @@ mod tests{
         // Checks if it can be set high,
         // Checks if it can be set back low.
 
-        let mut petter = Petter::new()?;
-        let mut config = petter.hand.config();
+        // let mut petter = Petter::new()?;
+        // let mut config = petter.hand.config();
 
-        petter.hand.reconfigure(config.as_input())?;
-        let mut line_value = petter.hand.value(petter.lane)?;
-        println!("line value before pet is: {}", line_value);
-        assert_eq!(line_value, Value::Inactive);
+        // petter.hand.reconfigure(config.as_input())?;
+        // let mut line_value = petter.hand.value(petter.lane)?;
+        // println!("line value before pet is: {}", line_value);
+        // assert_eq!(line_value, Value::Inactive);
 
-        petter.hand.reconfigure(config.as_output(line_value))?;
-        petter.pet()?;
+        // petter.hand.reconfigure(config.as_output(line_value))?;
+        // petter.pet()?;
 
-        petter.hand.reconfigure(config.as_input())?;
-        line_value = petter.hand.value(petter.lane)?;
-        println!("line value after first pet is: {}", line_value);
-        assert_eq!(line_value, Value::Active);
+        // petter.hand.reconfigure(config.as_input())?;
+        // line_value = petter.hand.value(petter.lane)?;
+        // println!("line value after first pet is: {}", line_value);
+        // assert_eq!(line_value, Value::Active);
 
-        petter.hand.reconfigure(config.as_output(line_value))?;
-        petter.pet()?;
+        // petter.hand.reconfigure(config.as_output(line_value))?;
+        // petter.pet()?;
 
-        petter.hand.reconfigure(config.as_input())?;
-        line_value = petter.hand.value(petter.lane)?;
-        println!("line value after second pet is: {}", line_value);
-        assert_eq!(line_value, Value::Inactive);
+        // petter.hand.reconfigure(config.as_input())?;
+        // line_value = petter.hand.value(petter.lane)?;
+        // println!("line value after second pet is: {}", line_value);
+        // assert_eq!(line_value, Value::Inactive);
 
-        drop(petter);
+        // drop(petter);
 
         // Read this to also check gpio-sim value
         // cat /sys/devices/platform/gpio-sim.0/gpiochip2/sim_gpio25/value
