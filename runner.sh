@@ -5,7 +5,7 @@ bin=$1
 shift
 
 user="debian" # password: tmppwd
-host="oresat-c3.local"
+host="c3.oresat.org"
 path="pet-wdt"
 
 target="$user@$host"

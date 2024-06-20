@@ -102,8 +102,8 @@ impl Pingee {
         while match self.socket.recv_from(&mut buf) {
             Ok(_) => true,
             Err(e) if e.kind() == ErrorKind::WouldBlock => false,
-            Err(e) => return Err(e).context("Ping socket read failed")
-        } {};
+            Err(e) => return Err(e).context("Ping socket read failed"),
+        } {}
         if let (Some(OneShot(remaining)), OneShot(ping)) = (self.timer.get()?, PING_TIMEOUT) {
             if remaining < ping {
                 self.timer.set(PING_TIMEOUT, TimerSetTimeFlags::empty())?;
