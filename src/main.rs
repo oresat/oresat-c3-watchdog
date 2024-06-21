@@ -22,7 +22,7 @@ use std::{
     io::ErrorKind,
     iter::Cycle,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    os::fd::{AsFd, AsRawFd},
+    os::fd::{AsFd, AsRawFd}, time::UNIX_EPOCH,
 };
 
 const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
@@ -37,6 +37,13 @@ const PET_OFF: Expiration = OneShot(TimeSpec::new(0, 900_000_000));
 
 // Specifically die to sigterm/sighup/sigint
 // set line low on death
+
+
+fn timestamp_millis() -> u128 {
+    let now = std::time::SystemTime::now();
+    let millis = now.duration_since(UNIX_EPOCH).unwrap().as_millis();
+    return millis;
+}
 
 struct Petter {
     hand: Lines<Output>,
@@ -75,7 +82,7 @@ impl Petter {
             self.hand.set_values([value])?;
             self.timer.set(duration, TimerSetTimeFlags::empty())?;
             #[cfg(debug_assertions)]
-            println!("PETTED at {} ms with value {}", chrono::Local::now().timestamp_millis(), value);
+            println!("PETTED at {} ms with value {}", timestamp_millis(), value);
         } else {
             bail!("Unexpected iterator in Petter")
         }
@@ -127,7 +134,7 @@ impl Pingee {
             bail!("Unexpected ping timeout timer")
         }
         #[cfg(debug_assertions)]
-        println!("PINGED at {} ms", chrono::Local::now().timestamp_millis());
+        println!("PINGED at {} ms", timestamp_millis());
         Ok(())
     }
 }
