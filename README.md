@@ -20,6 +20,10 @@ Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
   
 `cargo run`
 
+- use the -- sim flag to create a simulated gpiochip during runtime
+
+`cargo run -- sim`
+
 - Handy script that will ping the watchdog UDP port every 5 seconds
   
 `test_ping.sh`
@@ -28,3 +32,4 @@ Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
 `cargo test`
 
 `cargo test -- --nocapture` for print statements in the test functions
+
