@@ -1,12 +1,6 @@
-// Build release version (No Print statements): cargo build --release
-// Build Debug version: cargo build
- 
-// Run Tests: cargo test
-// Run Tests with print statements: cargo test -- --nocapture
-    
 use anyhow::{anyhow, bail, Context, Result};
 use gpiod::{Chip, Lines, Options, Output};
-use gpiosim::{Bank, Direction, Level, Sim};
+use gpiosim::{Bank, Sim};
 use mio::{net::UdpSocket, unix::SourceFd, Events, Interest, Poll, Token};
 use nix::sys::{
     signal::{SIGHUP, SIGINT, SIGTERM},
@@ -23,7 +17,7 @@ use std::{
     io::ErrorKind,
     iter::Cycle,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    os::fd::{AsFd, AsRawFd}, time::UNIX_EPOCH,
+    os::fd::{AsFd, AsRawFd},
 };
 
 const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
@@ -44,11 +38,13 @@ const GPIO_CONSUMER: &str = "C3_Watchdog";
 // Specifically die to sigterm/sighup/sigint
 // set line low on death
 
-
+#[cfg(debug_assertions)]
 fn timestamp_millis() -> u128 {
-    let now = std::time::SystemTime::now();
-    let millis = now.duration_since(UNIX_EPOCH).unwrap().as_millis();
-    return millis;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_micros()
 }
 
 struct Petter {
@@ -59,11 +55,15 @@ struct Petter {
 
 impl Petter {
     fn new(gpio_chip: &str, gpio_label: &str, gpio_line: u32) -> Result<Self> {
-
         let chip = Chip::new(gpio_chip).context("Failed to get GPIO chip")?;
 
         let read_label = chip.line_info(gpio_line)?.name;
-        anyhow::ensure!(read_label == gpio_label, "Invalid GPIO LINE label, expected {:?}, found {:?}", gpio_label, read_label);
+        anyhow::ensure!(
+            read_label == gpio_label,
+            "Invalid GPIO LINE label: expected {:?}, found {:?}",
+            gpio_label,
+            read_label
+        );
 
         let opts = Options::output([GPIO_LINE])
             .values([false])
@@ -89,7 +89,6 @@ impl Petter {
         }
         Ok(())
     }
-
 
     fn on_pet(&mut self) -> Result<()> {
         self.timer.wait()?; // TODO: read and assert 1?
@@ -125,8 +124,8 @@ impl Pingee {
         while match self.socket.recv_from(&mut buf) {
             Ok(_) => true,
             Err(e) if e.kind() == ErrorKind::WouldBlock => false,
-            Err(e) => return Err(e).context("Ping socket read failed")
-        } {};
+            Err(e) => return Err(e).context("Ping socket read failed"),
+        } {}
         if let (Some(OneShot(remaining)), OneShot(ping)) = (self.timer.get()?, PING_TIMEOUT) {
             if remaining < ping {
                 self.timer.set(PING_TIMEOUT, TimerSetTimeFlags::empty())?;
@@ -140,49 +139,35 @@ impl Pingee {
     }
 }
 
-
 fn simulate_gpio(line_offset: u32, line_label: &str) -> Sim {
     #[cfg(debug_assertions)]
     println!("Simulating the GPIO.");
 
-    let sim = gpiosim::builder()
-    .with_name("watchdog_sim")
-    .with_bank(
-        Bank::new(32, "sim_bank")
-            .name(line_offset, line_label)
-    )
-    .live();
-
-    sim.expect("Failed to simulate GPIO")
+    gpiosim::builder()
+        .with_name("watchdog_sim")
+        .with_bank(Bank::new(32, "sim_bank").name(line_offset, line_label))
+        .live()
+        .expect("Failed to simulate GPIO")
 }
 
 fn main() -> Result<()> {
     #[cfg(debug_assertions)]
     println!("This is a Debug build.");
 
-    // // get command line arguments
-    let args: Vec<String> = std::env::args().collect();
-
-    let _sim: Sim;
-    let gpio_chip : String;
-
-    if args.iter().any(|arg| arg == "sim") {
-        _sim = simulate_gpio(GPIO_LINE, GPIO_LABEL);
-        let chips = gpiod::Chip::list_devices();
-        let sim_chip_index = chips.unwrap().len() -1;
-        gpio_chip = "gpiochip".to_string() + &(sim_chip_index.to_string());
-    }
-    else{
-       gpio_chip = GPIO_CHIP.to_string();
-    }
-
-    let mut petter = Petter::new(&gpio_chip,GPIO_LABEL,GPIO_LINE)?;
+    let sim: Sim;
+    let gpio_chip = if std::env::args().any(|arg| arg == "sim") {
+        sim = simulate_gpio(GPIO_LINE, GPIO_LABEL);
+        sim.chips()[0].chip_name.clone()
+    } else {
+        GPIO_CHIP.to_string()
+    };
 
     let mut poll = Poll::new()?;
     let registry = poll.registry();
     let mut events = Events::with_capacity(128);
 
     let mut pingee = Pingee::new()?;
+    let mut petter = Petter::new(&gpio_chip, GPIO_LABEL, GPIO_LINE)?;
     let mask = SigSet::from_iter([SIGTERM, SIGHUP, SIGINT]);
     mask.thread_block()?;
     let sfd = SignalFd::with_flags(&mask, SfdFlags::SFD_NONBLOCK)?;
@@ -221,37 +206,31 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
-    fn test_simulated_pet() -> Result<()>{
+    fn test_simulated_pet() -> Result<()> {
+        // Test whether the simulated watchdog GPIO output changes on each pet
 
-        // Setup Simulated GPIO
+        use gpiosim::Level;
+
         let sim = simulate_gpio(GPIO_LINE, GPIO_LABEL);
-        let chips = gpiod::Chip::list_devices();
-        let sim_chip_index = chips.unwrap().len() -1;
-        let gpio_chip = "gpiochip".to_string() + &(sim_chip_index.to_string());
+        let chip = &sim.chips()[0];
+        let gpio_chip = chip.chip_name.clone();
 
-        let chip = sim.chips();
-        let c = &chip[0];
+        let mut petter = Petter::new(&gpio_chip, GPIO_LABEL, GPIO_LINE)?;
 
-        // Initialize the petter
-        let mut petter = Petter::new(&gpio_chip,GPIO_LABEL,GPIO_LINE)?;
-
-        // Check simulated Line level Before Petting the watchdog
-        let line_level = c.get_level(GPIO_LINE).unwrap();
-        assert_eq!(line_level, gpiosim::Level::Low);
+        let line_level = chip.get_level(GPIO_LINE).unwrap();
+        assert_eq!(line_level, Level::Low);
 
         petter.pet()?;
-        // Check simulated Line level after pet 1
-        let line_level = c.get_level(GPIO_LINE).unwrap();
-        assert_eq!(line_level, gpiosim::Level::High);
+        let line_level = chip.get_level(GPIO_LINE).unwrap();
+        assert_eq!(line_level, Level::High);
 
         petter.pet()?;
-        // Check simulated Line level after pet 2
-        let line_level = c.get_level(GPIO_LINE).unwrap();
-        assert_eq!(line_level, gpiosim::Level::Low);
+        let line_level = chip.get_level(GPIO_LINE).unwrap();
+        assert_eq!(line_level, Level::Low);
 
         Ok(())
     }
