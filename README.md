@@ -38,14 +38,23 @@ to all cargo commands:
 
 `cargo r --target armv7-unknown-linux-gnueabihf`
 
-This will also execute `runner.sh`. This script is currently set up to run the watchdog on the
-[flatsat C3](https://github.com/oresat/oresat-flatsat) but you'll need to be connected to the
-OreSat VPN for this to work. This script could alternatively be modified to launch a local VM for
-local testing.
+To have cargo run the application on the [flatsat C3](https://github.com/oresat/oresat-flatsat) add
+ the `card="c3"` cfg option:
 
-If it complains about incompatible GLIBC versions consider using an older cross compiler toolchain
-[like this one](https://github.com/abhiTronix/raspberry-pi-cross-compilers), and set the linker in
-.cargo/config.toml
+`RUSTFLAGS='--cfg card="c3"' cargo r --target armv7-unknown-linux-gnueabihf`
+
+This will execute `.cargo/runner.sh` which is set up to run the watchdog on the flatsat, but you'll
+need to be connected to the OreSat VPN for this to work. This script could alternatively be
+modified to launch a local VM for local testing.
+
+If running it complains about incompatible GLIBC versions consider using an older cross compiler
+toolchain [like this one](https://github.com/abhiTronix/raspberry-pi-cross-compilers), and set the
+linker in .cargo/config.toml:
+
+```toml
+[target.armv7-unknown-linux-gnueabihf]
+linker = ".cargo/cross-pi-gcc-10.3.0-2/bin/arm-linux-gnueabihf-gcc"
+```
 
 ### Build a debian package:
 Install cargo-deb: `cargo install cargo-deb`

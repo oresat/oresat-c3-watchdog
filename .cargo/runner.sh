@@ -1,12 +1,11 @@
 #!/bin/sh
 set -e
 
-bin=$1
-shift
-
-user="debian" # password: tmppwd
-host="c3.oresat.org"
-path="pet-wdt"
+user=$1
+host=$2
+path=$3
+bin=$4
+shift 4
 
 target="$user@$host"
 
