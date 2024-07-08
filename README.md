@@ -56,8 +56,30 @@ linker in .cargo/config.toml:
 linker = ".cargo/cross-pi-gcc-10.3.0-2/bin/arm-linux-gnueabihf-gcc"
 ```
 
-### Build a debian package:
-Install cargo-deb: `cargo install cargo-deb`
-Version set in Cargo.toml. If doing a release be sure to also make a tag
+### Build a debian package
+Install cargo-deb: `cargo install cargo-deb`. The version is set in Cargo.toml. If doing a release
+be sure to also make a tag.
+
 `cargo deb --target armv7-unknown-linux-gnueabihf`
+
 Package will be in `target/armv7-unknown-linux-gnueabihf/debian/`
+
+## Debugging
+- Omit the --release flag to run in debug mode
+- Prints petted and pinged times
+  
+`cargo run`
+
+- use the -- sim flag to create a simulated gpiochip during runtime
+
+`cargo run -- sim`
+
+- Handy script that will ping the watchdog UDP port every 5 seconds
+  
+`tests/test_ping.sh`
+
+### Testing the watchdog
+`cargo test`
+
+`cargo test -- --nocapture` for print statements in the test functions
+
