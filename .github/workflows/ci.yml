@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install gpio-sim
+        run: |
+          sudo apt-get update
+          sudo apt-get install linux-modules-extra-$(uname -r)
+          sudo modprobe gpio-sim
       - name: Build
         run: cargo build --verbose
       - name: Run fmt
@@ -22,4 +27,4 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features
       - name: Run tests
-        run: cargo test --verbose
+        run: CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER='sudo -E' cargo test --verbose
