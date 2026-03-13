@@ -1,0 +1,21 @@
+[Unit]
+Description=OreSat Hardware Watchdog
+After=network.target
+
+[Service]
+ExecStart=/home/debian/oresat-c3-watchdog/target/release/oresat-c3-watchdog
+Restart=always
+RestartSec=1
+
+# --- REAL-TIME PRIORITY ---
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=99
+LimitRTPRIO=99
+LimitRTTIME=infinity
+CPUAccounting=no
+
+# --- RESOURCE LIMITS ---
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target

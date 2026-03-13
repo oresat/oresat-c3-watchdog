@@ -1,12 +1,10 @@
 [package]
 name = "oresat-c3-watchdog"
 version = "0.1.0"
-authors = ["Theo Hill <Theo0x48@gmail.com>"]
+authors = ["Theo Hill <Theo0x48@gmail.com>", "Chris Kane-Pardy <chrisk@pdx.edu>"]
 edition = "2021"
-description = "Pets the hardware watchdog on the C3"
+description = "Pets the hardware watchdog on the C3 with Real-Time Scheduling"
 license = "GPL-3.0-or-later"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.79"
@@ -21,3 +19,8 @@ maintainer-scripts = "debian/"
 # even though the cross toolchain uses 2.31.
 depends = "libc6:armhf (>= 2.31)"
 systemd-units = { enable = true }
+
+[profile.release]
+strip = true      
+opt-level = "z"   # Optimize for size
+lto = true        
