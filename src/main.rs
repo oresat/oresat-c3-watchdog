@@ -17,7 +17,7 @@ use std::{
     io::ErrorKind,
     iter::Cycle,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    os::fd::{AsFd, AsRawFd},
+    os::fd::AsRawFd,
 };
 
 const ADDRESS: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 20001);
@@ -179,12 +179,12 @@ fn main() -> Result<()> {
 
     registry.register(&mut pingee.socket, PING, Interest::READABLE)?;
     registry.register(
-        &mut SourceFd(&petter.timer.as_fd().as_raw_fd()),
+        &mut SourceFd(&petter.timer.as_raw_fd()),
         PET,
         Interest::READABLE,
     )?;
     registry.register(
-        &mut SourceFd(&pingee.timer.as_fd().as_raw_fd()),
+        &mut SourceFd(&pingee.timer.as_raw_fd()),
         TIMEOUT,
         Interest::READABLE,
     )?;
