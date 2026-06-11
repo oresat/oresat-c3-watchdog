@@ -28,7 +28,7 @@ const PET_OFF: Expiration = OneShot(TimeSpec::new(0, 900_000_000));
 
 const GPIO_LABEL: &str = "PET_WDT";
 const GPIO_LINE: u32 = 25;
-const GPIO_CHIP: &str = "gpiochip2";
+const GPIO_CHIP: &str = "gpiochip1";
 const GPIO_CONSUMER: &str = "C3_Watchdog";
 
 // pet every 1s (0.1s high, 0.9s low)

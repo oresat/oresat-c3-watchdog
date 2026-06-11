@@ -1,6 +1,6 @@
 [package]
 name = "oresat-c3-watchdog"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Theo Hill <Theo0x48@gmail.com>"]
 edition = "2024"
 description = "Pets the hardware watchdog on the C3"
